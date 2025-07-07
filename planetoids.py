@@ -176,7 +176,7 @@ class Ship(GameObject):
         self.rotation += direction * self.rotation_speed * dt
         self.rotation = self.rotation % 360
     
-    def hyperspace(self):
+    def hyperspace(self, game=None):
         if self.hyperspace_cooldown <= 0:
             # Random teleport with risk
             self.position.x = random.randint(50, GAME_WIDTH - 50)
@@ -186,13 +186,13 @@ class Ship(GameObject):
             
             # Small chance of destruction (10%)
             if random.random() < 0.1:
-                destroyed = self.take_hit(DamageType.HYPERSPACE, damage=self.health)  # Instant death
+                destroyed = self.take_hit(DamageType.HYPERSPACE, damage=self.health, game=game)  # Instant death
                 if destroyed:
                     self.active = False
                 return False
         return True
     
-    def take_hit(self, damage_type: DamageType = DamageType.ASTEROID, damage: int = 1):
+    def take_hit(self, damage_type: DamageType = DamageType.ASTEROID, damage: int = 1, game=None):
         """Called when the ship is hit - triggers flash effect and reduces health"""
         if self.invulnerable_time > 0:
             return False  # No damage during invulnerability
@@ -204,27 +204,30 @@ class Ship(GameObject):
         self.invulnerable_time = 2.0  # 2 seconds of invulnerability after hit
         
         # Play hit sound effect
-        self.play_hit_sound(damage_type)
+        self.play_hit_sound(damage_type, game)
         
         # Return True if ship is destroyed
         return self.health <= 0
     
-    def play_hit_sound(self, damage_type: DamageType):
+    def play_hit_sound(self, damage_type: DamageType, game=None):
         """Play appropriate sound effect for damage type"""
+        if not game:
+            return
+            
         try:
             # Generate different tones for different damage types
             if damage_type == DamageType.ASTEROID:
                 # Low thud sound
-                self.generate_sound(200, 0.2)
+                game.generate_sound(200, 0.2)
             elif damage_type == DamageType.ALIEN_SHIP:
                 # Sharp crash sound
-                self.generate_sound(800, 0.3)
+                game.generate_sound(800, 0.3)
             elif damage_type == DamageType.ALIEN_BULLET:
                 # High pitched zap
-                self.generate_sound(1200, 0.15)
+                game.generate_sound(1200, 0.15)
             elif damage_type == DamageType.HYPERSPACE:
                 # Warbling sound
-                self.generate_sound(400, 0.4)
+                game.generate_sound(400, 0.4)
         except:
             pass  # Ignore sound errors
     
@@ -476,10 +479,14 @@ class Game:
             print("Screen recorder available. Press 'R' to start/stop recording.")
         
         # Initialize sound mixer
+        self.sound_enabled = False
         try:
             pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-        except:
-            pass  # Continue without sound if mixer fails
+            self.sound_enabled = True
+            print("✓ Sound system initialized successfully")
+        except Exception as e:
+            print(f"⚠ Sound system unavailable: {e}")
+            print("  Game will run without sound effects")
         
         self.state = GameState.MENU
         self.score = 0
@@ -499,6 +506,9 @@ class Game:
     
     def generate_sound(self, frequency: int, duration: float, volume: float = 0.1):
         """Generate a simple tone for sound effects"""
+        if not self.sound_enabled:
+            return
+            
         try:
             sample_rate = 22050
             frames = int(duration * sample_rate)
@@ -511,8 +521,9 @@ class Game:
             sound = pygame.sndarray.make_sound(pygame.array.array('i', arr))
             sound.set_volume(volume)
             sound.play()
-        except:
-            pass  # Ignore sound generation errors
+        except Exception as e:
+            print(f"Sound generation error: {e}")
+            self.sound_enabled = False  # Disable sound if it fails
     
     def play_shoot_sound(self):
         """Play shooting sound effect"""
@@ -614,7 +625,7 @@ class Game:
             # Hyperspace (panic button)
             if keys[pygame.K_h]:
                 if pygame.K_h not in self.keys_pressed:
-                    if not self.ship.hyperspace():
+                    if not self.ship.hyperspace(self):
                         # Ship was destroyed in hyperspace
                         self.lives -= 1
                         if self.lives <= 0:
@@ -750,7 +761,7 @@ class Game:
         if (self.ship and self.ship.active and self.ship.invulnerable_time <= 0):
             for asteroid in self.asteroids:
                 if self.ship.collides_with(asteroid):
-                    destroyed = self.ship.take_hit(DamageType.ASTEROID, damage=1)
+                    destroyed = self.ship.take_hit(DamageType.ASTEROID, damage=1, game=self)
                     if destroyed:
                         self.ship.active = False
                     break
@@ -759,7 +770,7 @@ class Game:
         if (self.ship and self.ship.active and self.ship.invulnerable_time <= 0):
             for alien in self.alien_ships:
                 if self.ship.collides_with(alien):
-                    destroyed = self.ship.take_hit(DamageType.ALIEN_SHIP, damage=2)  # Aliens do more damage
+                    destroyed = self.ship.take_hit(DamageType.ALIEN_SHIP, damage=2, game=self)  # Aliens do more damage
                     if destroyed:
                         self.ship.active = False
                     alien.active = False
@@ -769,7 +780,7 @@ class Game:
         if (self.ship and self.ship.active and self.ship.invulnerable_time <= 0):
             for bullet in self.alien_bullets[:]:
                 if self.ship.collides_with(bullet):
-                    destroyed = self.ship.take_hit(DamageType.ALIEN_BULLET, damage=1)
+                    destroyed = self.ship.take_hit(DamageType.ALIEN_BULLET, damage=1, game=self)
                     if destroyed:
                         self.ship.active = False
                     bullet.active = False

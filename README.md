@@ -38,12 +38,13 @@ This recreation includes all the core gameplay elements plus modern enhancements
 
 ### Enhanced Audio Feedback
 - **Hit Sounds**: Different tones for each damage type:
-  - Low thud for asteroid hits
-  - Sharp crash for alien collisions
-  - High-pitched zap for alien bullets
-  - Warbling sound for hyperspace damage
-- **Shooting Sounds**: Audio feedback for weapon fire
-- **Explosion Sounds**: Different explosion sounds based on object size
+  - Low thud for asteroid hits (200Hz)
+  - Sharp crash for alien collisions (800Hz)
+  - High-pitched zap for alien bullets (1200Hz)
+  - Warbling sound for hyperspace damage (400Hz)
+- **Shooting Sounds**: Audio feedback for weapon fire (600Hz)
+- **Explosion Sounds**: Different explosion sounds based on object size (150Hz base)
+- **Graceful Degradation**: Game runs perfectly without audio if sound system unavailable
 
 ## Controls
 
