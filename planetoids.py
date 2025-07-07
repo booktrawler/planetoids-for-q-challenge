@@ -22,8 +22,12 @@ except ImportError:
 pygame.init()
 
 # Constants
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+WINDOW_WIDTH = 1000
+WINDOW_HEIGHT = 800
+GAME_WIDTH = 640
+GAME_HEIGHT = 480
+GAME_X_OFFSET = (WINDOW_WIDTH - GAME_WIDTH) // 2
+GAME_Y_OFFSET = 60  # Leave space for TV frame at top
 FPS = 60
 
 # Colors (ZX81 inspired - black and white with some accent colors)
@@ -78,9 +82,9 @@ class GameObject:
         # Update position
         self.position = self.position + self.velocity * dt
         
-        # Wrap around screen edges
-        self.position.x = self.position.x % SCREEN_WIDTH
-        self.position.y = self.position.y % SCREEN_HEIGHT
+        # Wrap around game area edges
+        self.position.x = self.position.x % GAME_WIDTH
+        self.position.y = self.position.y % GAME_HEIGHT
     
     def draw(self, screen):
         pass
@@ -98,25 +102,33 @@ class Ship(GameObject):
         super().__init__(x, y)
         self.radius = 8
         self.thrust_power = 200
-        self.rotation_speed = 300
+        self.rotation_speed = 300  # degrees per second
         self.max_speed = 300
-        self.fuel = 1000  # Strategic fuel management element
+        
+        # Fuel system
         self.max_fuel = 1000
-        self.invulnerable_time = 0
-        self.hyperspace_cooldown = 0
-        self.hit_flash_time = 0  # Timer for flash effect when hit
-        self.flash_intensity = 0.0  # Intensity of the flash (0.0 to 1.0)
-        self.damage_type = None  # Type of damage for different flash colors
+        self.fuel = self.max_fuel
+        self.fuel_consumption_rate = 100  # fuel per second when thrusting
         
         # Health system
         self.max_health = 3
         self.health = self.max_health
+        self.invulnerable_time = 0
+        self.invulnerable_duration = 2.0  # 2 seconds of invulnerability after hit
+        
+        # Hyperspace system
+        self.hyperspace_cooldown = 0
+        
+        # Damage flash effect
+        self.hit_flash_time = 0  # Timer for flash effect when hit
+        self.flash_intensity = 0.0  # Intensity of the flash (0.0 to 1.0)
+        self.damage_type = None  # Type of damage for different flash colors
         
         # Ship shape (triangle pointing up)
         self.shape = [
-            Vector2(0, -10),
-            Vector2(-6, 8),
-            Vector2(6, 8)
+            Vector2(0, -8),   # nose
+            Vector2(-6, 6),   # left wing
+            Vector2(6, 6)     # right wing
         ]
     
     def update(self, dt: float):
@@ -167,8 +179,8 @@ class Ship(GameObject):
     def hyperspace(self):
         if self.hyperspace_cooldown <= 0:
             # Random teleport with risk
-            self.position.x = random.randint(50, SCREEN_WIDTH - 50)
-            self.position.y = random.randint(50, SCREEN_HEIGHT - 50)
+            self.position.x = random.randint(50, GAME_WIDTH - 50)
+            self.position.y = random.randint(50, GAME_HEIGHT - 50)
             self.velocity = Vector2(0, 0)
             self.hyperspace_cooldown = 3.0  # 3 second cooldown
             
@@ -437,9 +449,23 @@ class AlienShip(GameObject):
 
 class Game:
     def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Planetoids - ZX81 Classic Recreation")
         self.clock = pygame.time.Clock()
+        
+        # Create game surface (the actual game area)
+        self.game_surface = pygame.Surface((GAME_WIDTH, GAME_HEIGHT))
+        
+        # Load ZX81 keyboard image
+        try:
+            self.keyboard_image = pygame.image.load("ZX81_keyboard.jpg")
+            # Scale keyboard to fit nicely at bottom
+            keyboard_width = WINDOW_WIDTH - 100
+            keyboard_height = int(keyboard_width * self.keyboard_image.get_height() / self.keyboard_image.get_width())
+            self.keyboard_image = pygame.transform.scale(self.keyboard_image, (keyboard_width, keyboard_height))
+        except pygame.error:
+            print("Could not load ZX81_keyboard.jpg - continuing without keyboard image")
+            self.keyboard_image = None
         self.font = pygame.font.Font(None, 36)
         self.small_font = pygame.font.Font(None, 24)
         
@@ -533,7 +559,7 @@ class Game:
     
     def start_level(self):
         # Create ship
-        self.ship = Ship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        self.ship = Ship(GAME_WIDTH // 2, GAME_HEIGHT // 2)
         self.ship.invulnerable_time = 2.0  # 2 seconds of invulnerability
         self.ship.health = self.ship.max_health  # Full health for new level
         
@@ -549,8 +575,8 @@ class Game:
         for _ in range(num_asteroids):
             # Place asteroids away from ship
             while True:
-                x = random.randint(50, SCREEN_WIDTH - 50)
-                y = random.randint(50, SCREEN_HEIGHT - 50)
+                x = random.randint(50, GAME_WIDTH - 50)
+                y = random.randint(50, GAME_HEIGHT - 50)
                 
                 # Make sure asteroid is not too close to ship
                 distance = math.sqrt((x - self.ship.position.x)**2 + 
@@ -594,7 +620,7 @@ class Game:
                         if self.lives <= 0:
                             self.state = GameState.GAME_OVER
                         else:
-                            self.ship = Ship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                            self.ship = Ship(GAME_WIDTH // 2, GAME_HEIGHT // 2)
                             self.ship.invulnerable_time = 2.0
                             self.ship.health = self.ship.max_health
                 self.keys_pressed.add(pygame.K_h)
@@ -664,21 +690,21 @@ class Game:
                 self.state = GameState.GAME_OVER
             else:
                 # Respawn ship with full health
-                self.ship = Ship(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+                self.ship = Ship(GAME_WIDTH // 2, GAME_HEIGHT // 2)
                 self.ship.invulnerable_time = 2.0
                 self.ship.health = self.ship.max_health
     
     def spawn_alien(self):
-        # Spawn alien at edge of screen
+        # Spawn alien at edge of game area
         side = random.randint(0, 3)
         if side == 0:  # Top
-            x, y = random.randint(0, SCREEN_WIDTH), 0
+            x, y = random.randint(0, GAME_WIDTH), 0
         elif side == 1:  # Right
-            x, y = SCREEN_WIDTH, random.randint(0, SCREEN_HEIGHT)
+            x, y = GAME_WIDTH, random.randint(0, GAME_HEIGHT)
         elif side == 2:  # Bottom
-            x, y = random.randint(0, SCREEN_WIDTH), SCREEN_HEIGHT
+            x, y = random.randint(0, GAME_WIDTH), GAME_HEIGHT
         else:  # Left
-            x, y = 0, random.randint(0, SCREEN_HEIGHT)
+            x, y = 0, random.randint(0, GAME_HEIGHT)
         
         self.alien_ships.append(AlienShip(x, y))
     
@@ -753,20 +779,20 @@ class Game:
     def draw_hud(self):
         # Score
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
-        self.screen.blit(score_text, (10, 10))
+        self.game_surface.blit(score_text, (10, 10))
         
         # Lives
         lives_text = self.font.render(f"Lives: {self.lives}", True, WHITE)
-        self.screen.blit(lives_text, (10, 50))
+        self.game_surface.blit(lives_text, (10, 50))
         
         # Level
         level_text = self.font.render(f"Level: {self.level}", True, WHITE)
-        self.screen.blit(level_text, (10, 90))
+        self.game_surface.blit(level_text, (10, 90))
         
         # Health display
         if self.ship:
             health_text = self.small_font.render(f"Health: {self.ship.health}/{self.ship.max_health}", True, WHITE)
-            self.screen.blit(health_text, (10, 130))
+            self.game_surface.blit(health_text, (10, 130))
             
             # Health bar
             bar_width = 100
@@ -777,8 +803,8 @@ class Game:
             health_percent = self.ship.health / self.ship.max_health
             health_color = GREEN if health_percent > 0.6 else (YELLOW if health_percent > 0.3 else RED)
             
-            pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
-            pygame.draw.rect(self.screen, health_color, 
+            pygame.draw.rect(self.game_surface, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+            pygame.draw.rect(self.game_surface, health_color, 
                            (bar_x + 1, bar_y + 1, int((bar_width - 2) * health_percent), bar_height - 2))
         
         # Fuel gauge
@@ -787,22 +813,22 @@ class Game:
             fuel_color = GREEN if fuel_percent > 0.3 else (RED if fuel_percent > 0.1 else RED)
             
             fuel_text = self.small_font.render(f"Fuel: {int(fuel_percent * 100)}%", True, fuel_color)
-            self.screen.blit(fuel_text, (SCREEN_WIDTH - 120, 10))
+            self.game_surface.blit(fuel_text, (GAME_WIDTH - 120, 10))
             
             # Fuel bar
             bar_width = 100
             bar_height = 10
-            bar_x = SCREEN_WIDTH - 120
+            bar_x = GAME_WIDTH - 120
             bar_y = 35
             
-            pygame.draw.rect(self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
-            pygame.draw.rect(self.screen, fuel_color, 
+            pygame.draw.rect(self.game_surface, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+            pygame.draw.rect(self.game_surface, fuel_color, 
                            (bar_x + 1, bar_y + 1, int((bar_width - 2) * fuel_percent), bar_height - 2))
         
         # Hyperspace cooldown
         if self.ship and self.ship.hyperspace_cooldown > 0:
             cooldown_text = self.small_font.render(f"Hyperspace: {self.ship.hyperspace_cooldown:.1f}s", True, YELLOW)
-            self.screen.blit(cooldown_text, (SCREEN_WIDTH - 180, 55))
+            self.game_surface.blit(cooldown_text, (GAME_WIDTH - 180, 55))
         
         # Damage type indicator (for debugging/feedback)
         if self.ship and self.ship.hit_flash_time > 0 and self.ship.damage_type:
@@ -813,17 +839,17 @@ class Game:
                 DamageType.HYPERSPACE: "Hyperspace Malfunction!"
             }
             damage_text = self.small_font.render(damage_names.get(self.ship.damage_type, "Hit!"), True, self.ship.get_flash_color())
-            damage_rect = damage_text.get_rect(center=(SCREEN_WIDTH // 2, 50))
-            self.screen.blit(damage_text, damage_rect)
+            damage_rect = damage_text.get_rect(center=(GAME_WIDTH // 2, 50))
+            self.game_surface.blit(damage_text, damage_rect)
     
     def draw_menu(self):
         title_text = self.font.render("PLANETOIDS", True, WHITE)
-        title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 100))
-        self.screen.blit(title_text, title_rect)
+        title_rect = title_text.get_rect(center=(GAME_WIDTH // 2, GAME_HEIGHT // 2 - 100))
+        self.game_surface.blit(title_text, title_rect)
         
         subtitle_text = self.small_font.render("ZX81 Classic Recreation", True, WHITE)
-        subtitle_rect = subtitle_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 70))
-        self.screen.blit(subtitle_text, subtitle_rect)
+        subtitle_rect = subtitle_text.get_rect(center=(GAME_WIDTH // 2, GAME_HEIGHT // 2 - 70))
+        self.game_surface.blit(subtitle_text, subtitle_rect)
         
         instructions = [
             "Arrow Keys / WASD: Move and Rotate",
@@ -836,63 +862,109 @@ class Game:
             "Press ENTER to Start"
         ]
         
-        y_offset = SCREEN_HEIGHT // 2 - 20
+        y_offset = GAME_HEIGHT // 2 - 20
         for instruction in instructions:
             if instruction:
                 text = self.small_font.render(instruction, True, WHITE)
-                text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, y_offset))
-                self.screen.blit(text, text_rect)
+                text_rect = text.get_rect(center=(GAME_WIDTH // 2, y_offset))
+                self.game_surface.blit(text, text_rect)
             y_offset += 25
     
     def draw_game_over(self):
         game_over_text = self.font.render("GAME OVER", True, RED)
-        game_over_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
-        self.screen.blit(game_over_text, game_over_rect)
+        game_over_rect = game_over_text.get_rect(center=(GAME_WIDTH // 2, GAME_HEIGHT // 2 - 50))
+        self.game_surface.blit(game_over_text, game_over_rect)
         
         final_score_text = self.font.render(f"Final Score: {self.score}", True, WHITE)
-        final_score_rect = final_score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-        self.screen.blit(final_score_text, final_score_rect)
+        final_score_rect = final_score_text.get_rect(center=(GAME_WIDTH // 2, GAME_HEIGHT // 2))
+        self.game_surface.blit(final_score_text, final_score_rect)
         
         restart_text = self.small_font.render("Press ENTER to Play Again or ESC to Quit", True, WHITE)
-        restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
-        self.screen.blit(restart_text, restart_rect)
+        restart_rect = restart_text.get_rect(center=(GAME_WIDTH // 2, GAME_HEIGHT // 2 + 50))
+        self.game_surface.blit(restart_text, restart_rect)
+    
+    def draw_tv_frame(self):
+        """Draw a retro CRT TV frame around the game area"""
+        # TV outer frame (dark gray/black)
+        tv_frame_color = (40, 40, 40)
+        tv_inner_color = (20, 20, 20)
+        
+        # Outer TV case
+        pygame.draw.rect(self.screen, tv_frame_color, 
+                        (GAME_X_OFFSET - 40, GAME_Y_OFFSET - 40, 
+                         GAME_WIDTH + 80, GAME_HEIGHT + 80))
+        
+        # Inner bezel
+        pygame.draw.rect(self.screen, tv_inner_color, 
+                        (GAME_X_OFFSET - 20, GAME_Y_OFFSET - 20, 
+                         GAME_WIDTH + 40, GAME_HEIGHT + 40))
+        
+        # Screen bezel (slightly rounded effect with multiple rectangles)
+        bezel_color = (60, 60, 60)
+        for i in range(5):
+            pygame.draw.rect(self.screen, bezel_color, 
+                            (GAME_X_OFFSET - 15 + i, GAME_Y_OFFSET - 15 + i, 
+                             GAME_WIDTH + 30 - 2*i, GAME_HEIGHT + 30 - 2*i), 1)
+        
+        # TV brand label
+        brand_font = pygame.font.Font(None, 24)
+        brand_text = brand_font.render("SINCLAIR", True, (200, 200, 200))
+        brand_rect = brand_text.get_rect(center=(WINDOW_WIDTH // 2, GAME_Y_OFFSET - 25))
+        self.screen.blit(brand_text, brand_rect)
     
     def draw(self):
-        self.screen.fill(BLACK)
+        # Fill the entire window with a dark background
+        self.screen.fill((30, 30, 30))
         
+        # Clear the game surface
+        self.game_surface.fill(BLACK)
+        
+        # Draw game content on the game surface
         if self.state == GameState.MENU:
             self.draw_menu()
         elif self.state == GameState.PLAYING:
-            # Draw all game objects
+            # Draw all game objects on the game surface
             if self.ship:
-                self.ship.draw(self.screen)
+                self.ship.draw(self.game_surface)
             
             for bullet in self.bullets:
-                bullet.draw(self.screen)
+                bullet.draw(self.game_surface)
             
             for asteroid in self.asteroids:
-                asteroid.draw(self.screen)
+                asteroid.draw(self.game_surface)
             
             for alien in self.alien_ships:
-                alien.draw(self.screen)
+                alien.draw(self.game_surface)
             
             for bullet in self.alien_bullets:
-                bullet.draw(self.screen)
+                bullet.draw(self.game_surface)
             
             self.draw_hud()
         elif self.state == GameState.GAME_OVER:
             self.draw_game_over()
         
-        # Add recording indicator
+        # Draw the TV frame
+        self.draw_tv_frame()
+        
+        # Blit the game surface to the main screen (inside the TV)
+        self.screen.blit(self.game_surface, (GAME_X_OFFSET, GAME_Y_OFFSET))
+        
+        # Draw the ZX81 keyboard at the bottom
+        if self.keyboard_image:
+            keyboard_y = GAME_Y_OFFSET + GAME_HEIGHT + 60
+            keyboard_x = (WINDOW_WIDTH - self.keyboard_image.get_width()) // 2
+            self.screen.blit(self.keyboard_image, (keyboard_x, keyboard_y))
+        
+        # Add recording indicator (on main screen, not game surface)
         if self.recording:
             # Draw red recording dot in top-right corner
-            pygame.draw.circle(self.screen, RED, (SCREEN_WIDTH - 20, 20), 8)
+            pygame.draw.circle(self.screen, RED, (WINDOW_WIDTH - 20, 20), 8)
             rec_text = self.small_font.render("REC", True, RED)
-            self.screen.blit(rec_text, (SCREEN_WIDTH - 60, 10))
+            self.screen.blit(rec_text, (WINDOW_WIDTH - 60, 10))
         
         pygame.display.flip()
         
-        # Capture frame for recording
+        # Capture frame for recording (capture the entire window)
         if self.recording and self.recorder:
             try:
                 self.recorder.click(self.screen)
