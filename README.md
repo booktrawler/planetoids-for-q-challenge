@@ -51,6 +51,7 @@ This recreation includes all the core gameplay elements plus modern enhancements
 - **Spacebar**: Fire weapons
 - **H**: Hyperspace (panic button) - teleports to random location with 10% destruction risk
 - **P**: Pause game
+- **R**: Start/Stop screen recording (saves as MP4 video)
 - **Enter**: Start game / Restart after game over
 - **Escape**: Quit game
 
@@ -66,6 +67,15 @@ This recreation includes all the core gameplay elements plus modern enhancements
    python planetoids.py
    ```
 
+### Screen Recording Setup
+
+The game includes built-in screen recording functionality that saves gameplay as MP4 videos. The recording feature requires:
+
+- `pygame-screen-recorder` - For capturing frames
+- `imageio[ffmpeg]` - For video encoding
+
+These are included in the requirements.txt file. If you encounter issues with video recording, ensure FFMPEG is properly installed on your system.
+
 ## Gameplay Tips
 
 1. **Health Management**: You now have 3 hit points - use them strategically!
@@ -75,6 +85,7 @@ This recreation includes all the core gameplay elements plus modern enhancements
 5. **Alien Threats**: UFOs appear periodically and actively hunt you - they're worth 500 points but deal 2 damage
 6. **Invulnerability**: You have 2 seconds of invulnerability after taking damage
 7. **Visual Cues**: Pay attention to the flash colors to understand what hit you
+8. **Recording Gameplay**: Press 'R' to start/stop recording. Videos are saved with timestamps (e.g., `planetoids_gameplay_20240707_120000.mp4`)
 
 ## Scoring
 

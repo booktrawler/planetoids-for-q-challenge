@@ -11,6 +11,12 @@ import sys
 from typing import List, Tuple
 from dataclasses import dataclass
 from enum import Enum
+try:
+    from pygame_screen_recorder import pygame_screen_recorder
+    RECORDER_AVAILABLE = True
+except ImportError:
+    RECORDER_AVAILABLE = False
+    print("pygame-screen-recorder not available. Install with: pip install pygame-screen-recorder")
 
 # Initialize Pygame
 pygame.init()
@@ -437,6 +443,12 @@ class Game:
         self.font = pygame.font.Font(None, 36)
         self.small_font = pygame.font.Font(None, 24)
         
+        # Initialize screen recorder
+        self.recorder = None
+        self.recording = False
+        if RECORDER_AVAILABLE:
+            print("Screen recorder available. Press 'R' to start/stop recording.")
+        
         # Initialize sound mixer
         try:
             pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
@@ -485,6 +497,33 @@ class Game:
         base_freq = 150
         duration = 0.2 + (size * 0.1)
         self.generate_sound(base_freq, duration, 0.08)
+    
+    def toggle_recording(self):
+        """Toggle screen recording on/off"""
+        if not RECORDER_AVAILABLE:
+            print("Screen recorder not available!")
+            return
+        
+        try:
+            if not self.recording:
+                # Start recording
+                import datetime
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"planetoids_gameplay_{timestamp}.mp4"
+                self.recorder = pygame_screen_recorder(filename)
+                self.recording = True
+                print(f"Started recording to {filename}")
+            else:
+                # Stop recording
+                if self.recorder:
+                    self.recorder.save()
+                    self.recorder = None
+                self.recording = False
+                print("Recording stopped and saved!")
+        except Exception as e:
+            print(f"Recording error: {e}")
+            self.recording = False
+            self.recorder = None
         
     def reset_game(self):
         self.score = 0
@@ -844,7 +883,23 @@ class Game:
         elif self.state == GameState.GAME_OVER:
             self.draw_game_over()
         
+        # Add recording indicator
+        if self.recording:
+            # Draw red recording dot in top-right corner
+            pygame.draw.circle(self.screen, RED, (SCREEN_WIDTH - 20, 20), 8)
+            rec_text = self.small_font.render("REC", True, RED)
+            self.screen.blit(rec_text, (SCREEN_WIDTH - 60, 10))
+        
         pygame.display.flip()
+        
+        # Capture frame for recording
+        if self.recording and self.recorder:
+            try:
+                self.recorder.click(self.screen)
+            except Exception as e:
+                print(f"Frame capture error: {e}")
+                self.recording = False
+                self.recorder = None
     
     def run(self):
         running = True
@@ -870,6 +925,8 @@ class Game:
                         self.state = GameState.PAUSED
                     elif event.key == pygame.K_p and self.state == GameState.PAUSED:
                         self.state = GameState.PLAYING
+                    elif event.key == pygame.K_r:
+                        self.toggle_recording()
             
             # Handle continuous input
             self.handle_input()
@@ -879,6 +936,14 @@ class Game:
             
             # Draw everything
             self.draw()
+        
+        # Clean up recording if active
+        if self.recording and self.recorder:
+            try:
+                self.recorder.save()
+                print("Recording stopped and saved!")
+            except Exception as e:
+                print(f"Error stopping recording: {e}")
         
         pygame.quit()
         sys.exit()
